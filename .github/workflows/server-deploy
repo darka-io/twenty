@@ -1,0 +1,37 @@
+name: Build and Deploy Docker Image
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  build_and_deploy:
+    runs-on: ubuntu-latest
+    env:
+      SKIP_ENV_VALIDATION: true
+    steps:
+    - name: Check out repository
+      uses: actions/checkout@v2
+
+    - name: Build image
+      run: docker build -t ${{ github.event.repository.name }}:${{ github.sha }} .
+      
+    - name: Install doctl 
+      uses: digitalocean/action-doctl@v2
+      with:
+        token: ${{secrets.REGISTRY_KEY}}
+    - name: Log in to DO Container Registry 
+      run: doctl registry login --expiry-seconds 600
+    - name: Tag image
+      run: docker tag ${{ github.event.repository.name }}-server:${{github.sha}}  registry.digitalocean.com/darka-io-prod/${{ github.event.repository.name }}-server:${{ github.sha }}
+    - name: Push image
+      run: docker push registry.digitalocean.com/darka-io-prod/${{ github.event.repository.name }}-server:${{ github.sha }}
+    - name: Set output
+      run: echo "IMAGE_URL=registry.digitalocean.com/darka-io-prod/${{ github.event.repository.name }}-server:${{ github.sha }}" >> $GITHUB_ENV
+    - name: Deploy Image to CapRrover
+      uses: caprover/deploy-from-github@v1.1.2
+      with:
+        server: "${{ secrets.CAPROVER_SERVER }}"
+        app: "${{ secrets.APP_SERVER_NAME }}"
+        token: "${{ secrets.APP_SERVER_TOKEN }}"
+        image: ${{ env.IMAGE_URL }}
